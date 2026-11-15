@@ -20,15 +20,15 @@ canvas{display:block}
 </style></head><body><canvas id="c"></canvas>
 <div id="menu"><div class="box"><h1>Mini Dune: Zbieracze</h1><p id="res"></p>
 <p>Kliknij bazę, przytrzymaj przycisk i puść go na bladym kółku – powstanie zbieracz (30 kryształów). Kliknij zbieracza, żeby go zaznaczyć, wybierz rozkaz klawiszem lub przyciskiem po prawej: <b>[S]</b>uń do, <b>[D]</b>obywaj, <b>[F]</b>iltruj, <b>[A]</b>takuj (od poziomu 2) i kliknij cel. Prawy przycisk myszy lub spacja anuluje rozkaz. Uważaj na Robale!</p>
-<div class="cols"><div class="col"><p>Cel: jak najszybciej zbierz wszystkie 800 kryształów i zrzuć je do bazy. Punkty: kryształy w bazie, minus sekundy gry, plus 500 za ukończenie.</p><p class="best" id="b1"></p><button id="l1">Poziom 1</button></div>
-<div class="col" id="col2"><p>Cel: jak najszybciej zbierz w bazie 1000 kryształów, pokonując Robale strzałami kryształów.</p><p class="best" id="b2"></p><button id="l2">Poziom 2</button></div></div></div></div>
+<div class="cols"><div class="col"><p>Cel: jak najszybciej zbierz wszystkie 300 kryształów i zrzuć je do bazy. Punkty: kryształy w bazie, minus sekundy gry, plus 300 za ukończenie.</p><p class="best" id="b1"></p><button id="l1">Poziom 1</button></div>
+<div class="col" id="col2"><p>Cel: jak najszybciej zbierz w bazie 600 kryształów. Możesz pokonać Robale strzelając kryształami.</p><p class="best" id="b2"></p><button id="l2">Poziom 2</button></div></div></div></div>
 <script>
 // ===== USTAWIENIA (łatwa zmiana) =====
 const START_CRYSTALS=100, COLLECTOR_COST=30, BUILD_TIME=6;
 const CARGO_MAX=10, MINE_TIME=4, DELIVER_TIME=4;
-const CRYSTAL_PER_DIAMOND=10, FIELD_L1=200, TOTAL_L2=800, FIELD2_MIN=100, FIELD2_MAX=300, BUG_FIELD=50;
-const BUG_HP=12, BUG_SLOW_STEP=16, BUG_HIT_R=30, LASER_TIME=.25;
-const GOAL_L2=1000, WIN_L1=500, WIN_L2=5000;
+const CRYSTAL_PER_DIAMOND=10, FIELD_L1=75, TOTAL_L2=400, FIELD2_MIN=50, FIELD2_MAX=250, BUG_FIELD=50;
+const BUG_HP=12, BUG_SLOW_STEP=16, BUG_HIT_R=30, LASER_TIME=.2;
+const GOAL_L2=600, WIN_L1=500, WIN_L2=5000;
 const COLLECTOR_SPEED=70, BASE_R=50, COLL_R=14, DIE_TIME=2;
 const BUG_FIRST=5, BUG_INTERVAL=7, BUG_SPEED=60;
 
