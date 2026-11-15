@@ -7,12 +7,28 @@
 @media (prefers-color-scheme:dark){:root{--bg:#2a231b}}
 html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
 canvas{display:block}
+#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,15,10,.94);color:#f3e6cc;font-family:system-ui,sans-serif;overflow:auto;padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px)}
+#menu .box{max-width:780px;text-align:center}
+#menu h1{font-size:clamp(28px,6vw,46px);margin:.2em 0;color:#e8b830}
+#menu p{line-height:1.45;margin:.5em 0}
+#res{color:#ffd27a;font-weight:bold;font-size:1.1em}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:18px}
+.col{display:flex;flex-direction:column;justify-content:space-between;background:rgba(255,255,255,.06);border-radius:10px;padding:14px}
+.best{opacity:.8;font-size:.9em}
+#menu button{font:bold 20px system-ui,sans-serif;padding:12px 24px;border:0;border-radius:8px;cursor:pointer;color:#1b1408}
+#l1{background:#e8b830}#l2{background:#3ddc5a}
 </style></head><body><canvas id="c"></canvas>
+<div id="menu"><div class="box"><h1>Mini Dune: Zbieracze</h1><p id="res"></p>
+<p>Kliknij bazę, przytrzymaj przycisk i puść go na bladym kółku – powstanie zbieracz (30 kryształów). Kliknij zbieracza, żeby go zaznaczyć, wybierz rozkaz klawiszem lub przyciskiem po prawej: <b>[S]</b>uń do, <b>[D]</b>obywaj, <b>[F]</b>iltruj, <b>[A]</b>takuj (od poziomu 2) i kliknij cel. Prawy przycisk myszy lub spacja anuluje rozkaz. Uważaj na Robale!</p>
+<div class="cols"><div class="col"><p>Cel: jak najszybciej zbierz wszystkie 800 kryształów i zrzuć je do bazy. Punkty: kryształy w bazie, minus sekundy gry, plus 500 za ukończenie.</p><p class="best" id="b1"></p><button id="l1">Poziom 1</button></div>
+<div class="col" id="col2"><p>Cel: jak najszybciej zbierz w bazie 1000 kryształów, pokonując Robale strzałami kryształów.</p><p class="best" id="b2"></p><button id="l2">Poziom 2</button></div></div></div></div>
 <script>
 // ===== USTAWIENIA (łatwa zmiana) =====
 const START_CRYSTALS=100, COLLECTOR_COST=30, BUILD_TIME=6;
 const CARGO_MAX=10, MINE_TIME=4, DELIVER_TIME=4;
-const FIELD_MIN=100, FIELD_MAX=150, CRYSTAL_PER_DIAMOND=10;
+const CRYSTAL_PER_DIAMOND=10, FIELD_L1=200, TOTAL_L2=800, FIELD2_MIN=100, FIELD2_MAX=300, BUG_FIELD=50;
+const BUG_HP=12, BUG_SLOW_STEP=16, BUG_HIT_R=30, LASER_TIME=.25;
+const GOAL_L2=1000, WIN_L1=500, WIN_L2=5000;
 const COLLECTOR_SPEED=70, BASE_R=50, COLL_R=14, DIE_TIME=2;
 const BUG_FIRST=5, BUG_INTERVAL=7, BUG_SPEED=60;
 
@@ -21,16 +37,36 @@ function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight}addEventListener('re
 const COL={A:'#ff4040',S:'#4aa0ff',D:'#3ddc5a',F:'#c070ff'},NAME={A:'Atakuj',S:'Suń do',D:'Dobywaj',F:'Filtruj'},KEYS='ASDF';
 const R=(a,b)=>a+Math.random()*(b-a);
 const bx=()=>W/2,by=()=>H/2;
-let crystals=START_CRYSTALS,build=null,ghost=null,sel=null,order=null,mx=0,my=0,msg='',msgT=0,t=0,bugT=BUG_FIRST;
-const cols=[],fields=[],bugs=[];
+let crystals=START_CRYSTALS,build=null,ghost=null,sel=null,order=null,mx=0,my=0,msg='',msgT=0,t=0,gt=0,lvl=1,state='menu',bugT=BUG_FIRST;
+const cols=[],fields=[],bugs=[],lasers=[];
+const SK='minidune_v1';let save={b1:null,b2:null,u2:false};
+try{Object.assign(save,JSON.parse(localStorage.getItem(SK)||'{}'))}catch(e){}
+const store=()=>{try{localStorage.setItem(SK,JSON.stringify(save))}catch(e){}};
+const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
 
-function newField(qx,qy){
-  const v=Math.round(R(FIELD_MIN,FIELD_MAX)),n=Math.ceil(v/CRYSTAL_PER_DIAMOND),r=22+v*.15;
-  const fx=qx?R(.70,.84):R(.05,.30),fy=qy?R(.70,.92):R(.08,.30),d=[];
+function makeField(fx,fy,v){
+  const n=Math.ceil(v/CRYSTAL_PER_DIAMOND),r=22+v*.15,d=[];
   for(let i=0;i<n;i++){const a=R(0,6.28),rr=Math.sqrt(Math.random())*(r-8);d.push({x:Math.cos(a)*rr,y:Math.sin(a)*rr,h:R(195,230),l:R(45,65)})}
   return{fx,fy,v,r,d,get x(){return this.fx*W},get y(){return this.fy*H}};
 }
-for(const qx of[0,1])for(const qy of[0,1])fields.push(newField(qx,qy));
+function startLevel(n){
+  lvl=n;crystals=START_CRYSTALS;build=ghost=sel=order=null;gt=0;bugT=BUG_FIRST;
+  cols.length=fields.length=bugs.length=lasers.length=0;
+  let vals=[FIELD_L1,FIELD_L1,FIELD_L1,FIELD_L1];
+  if(n==2){let rem;do{vals=[0,0,0].map(()=>Math.round(R(FIELD2_MIN,FIELD2_MAX)));rem=TOTAL_L2-vals[0]-vals[1]-vals[2]}while(rem<FIELD2_MIN||rem>FIELD2_MAX);vals.push(rem);vals.sort(()=>Math.random()-.5)}
+  let i=0;for(const qx of[0,1])for(const qy of[0,1])fields.push(makeField(qx?R(.70,.84):R(.05,.30),qy?R(.70,.92):R(.08,.30),vals[i++]));
+  menu.style.display='none';state='play';
+}
+function checkEnd(){
+  const s=Math.floor(gt);let sc=null;
+  if(lvl==1&&!fields.length&&cols.every(c=>c.cargo==0||c.die!=null))sc=crystals-s+WIN_L1;
+  else if(lvl==2&&crystals>=GOAL_L2)sc=WIN_L2-s;
+  if(sc!=null){
+    const k='b'+lvl;if(save[k]==null||sc>save[k])save[k]=sc;if(lvl==1&&sc>0)save.u2=true;store();
+    state='over';snd(880,.5,'triangle',.15,1320);showMenu('Poziom '+lvl+' ukończony! Czas: '+fmt(s)+', wynik: '+sc);return true;
+  }
+  if(!cols.length&&!build&&crystals<COLLECTOR_COST){state='over';snd(200,.5,'sawtooth',.12,80);showMenu('Koniec gry – nie masz już zbieraczy ani kryształów na nowego.');return true}
+}
 
 // ===== DŹWIĘK (Web Audio) =====
 let ac;
@@ -45,11 +81,19 @@ function err(m){snd(150,.15,'sawtooth');if(m){msg=m;msgT=2}}
 // ===== STEROWANIE =====
 const btn=i=>({x:W-84,y:H/2-150+i*76,w:64,h:64});
 function setOrder(k){
-  if(!sel||k=='A')return;
+  if(!sel||(k=='A'&&lvl<2))return;
   order=order==k?null:k;snd(order?480:300,.06,'square');
 }
 function exec(x,y){
   const c=sel;if(!c||!order)return;
+  if(order=='A'){
+    if(c.cargo<=0){order=null;return err('Brak kryształów do strzału')}
+    const b=bugs.find(b=>Math.hypot(x-b.x,y-b.y)<BUG_HIT_R);if(!b)return err('Kliknij w Robala');
+    c.cargo--;b.hp--;c.a=Math.atan2(b.y-c.y,b.x-c.x);lasers.push({x1:c.x,y1:c.y,x2:b.x,y2:b.y,t:LASER_TIME});snd(1100,.15,'square',.1,400);
+    if(b.hp<=0){bugs.splice(bugs.indexOf(b),1);fields.push(makeField(Math.min(.88,Math.max(.03,b.x/W)),Math.min(.95,Math.max(.05,b.y/H)),BUG_FIELD));snd(300,.3,'triangle',.15,800)}
+    if(c.cargo<=0)order=null;
+    return;
+  }
   if(order=='S')c.o={t:'S',x,y};
   else if(order=='D'){
     const f=fields.find(f=>Math.hypot(x-f.x,y-f.y)<f.r);if(!f)return err('Kliknij pole kryształów');
@@ -106,10 +150,12 @@ function spawnBug(){
   const s=Math.floor(Math.random()*4),m=40;let x,y;
   if(s==0){x=-m;y=R(0,H)}else if(s==1){x=W+m;y=R(0,H)}else if(s==2){y=-m;x=R(0,W)}else{y=H+m;x=R(0,W)}
   const a=Math.atan2(R(H*.25,H*.75)-y,R(W*.25,W*.75)-x);
-  bugs.push({x,y,a,age:0});snd(200,.3,'sawtooth',.1,100);
+  bugs.push({x,y,a,age:0,hp:BUG_HP});snd(200,.3,'sawtooth',.1,100);
 }
 function update(dt){
-  t+=dt;if(msgT>0)msgT-=dt;
+  if(checkEnd())return;
+  t+=dt;gt+=dt;if(msgT>0)msgT-=dt;
+  for(let i=lasers.length-1;i>=0;i--)if((lasers[i].t-=dt)<=0)lasers.splice(i,1);
   if(build){
     build.t+=dt;
     if(build.t>=BUILD_TIME){cols.push({x:build.x,y:build.y,a:build.a,cargo:0,o:null,die:null,work:false});build=null;snd(660,.25,'triangle',.15,990)}
@@ -143,7 +189,7 @@ function update(dt){
   for(let i=cols.length-1;i>=0;i--)if(cols[i].die>=DIE_TIME)cols.splice(i,1);
   bugT-=dt;if(bugT<=0){spawnBug();bugT=BUG_INTERVAL}
   for(let i=bugs.length-1;i>=0;i--){
-    const b=bugs[i];b.age+=dt;b.x+=Math.cos(b.a)*BUG_SPEED*dt;b.y+=Math.sin(b.a)*BUG_SPEED*dt;
+    const b=bugs[i];b.age+=dt;const sp=BUG_SPEED*(1-(BUG_HP-b.hp)/BUG_SLOW_STEP);b.x+=Math.cos(b.a)*sp*dt;b.y+=Math.sin(b.a)*sp*dt;
     for(const c of cols)if(c.die==null)for(const k of[-1,0,1]){
       if(Math.hypot(c.x-(b.x+Math.cos(b.a)*14*k),c.y-(b.y+Math.sin(b.a)*14*k))<COLL_R+11){
         c.die=0;if(sel==c){sel=null;order=null}snd(130,.4,'sawtooth',.15,60);break;
@@ -194,13 +240,15 @@ function draw(){
   // robale
   for(const b of bugs){
     g.save();g.translate(b.x,b.y);g.rotate(b.a);
-    g.beginPath();g.roundRect(-22,-10,44,20,9);g.fillStyle='#d12b2b';g.fill();g.lineWidth=2;g.strokeStyle='#5a0d0d';g.stroke();
+    g.beginPath();g.roundRect(-22,-10,44,20,9);g.fillStyle='hsl(0,70%,'+(5+43*(b.hp-1)/(BUG_HP-1))+'%)';g.fill();g.lineWidth=2;g.strokeStyle='#5a0d0d';g.stroke();
     g.fillStyle='#ffe';g.beginPath();g.arc(14,-4,3,0,6.283);g.arc(14,4,3,0,6.283);g.fill();
     g.restore();
   }
+  for(const l of lasers){g.beginPath();g.moveTo(l.x1,l.y1);g.lineTo(l.x2,l.y2);g.lineWidth=3;g.strokeStyle='#3dff6a';g.stroke()}
+  txt(fmt(Math.floor(gt)),W/2,22,24,'rgba(255,255,255,.9)');
   // panel rozkazów
   if(sel)for(let i=0;i<4;i++){
-    const k=KEYS[i],b=btn(i),off=k=='A',on=order==k;
+    const k=KEYS[i],b=btn(i),off=k=='A'&&lvl<2,on=order==k;
     g.fillStyle=on?'#5a4f3d':'#241d15';g.fillRect(b.x,b.y,b.w,b.h);
     g.lineWidth=on?3:1.5;g.strokeStyle=on?'#fff':'#7a6a50';g.strokeRect(b.x,b.y,b.w,b.h);
     g.globalAlpha=off?.3:1;
@@ -216,8 +264,20 @@ function draw(){
   }
   txt('Baza: kliknij, przytrzymaj i puść na bladym kółku. Zbieracz: zaznacz, wciśnij S / D / F i kliknij cel. PPM lub spacja – anuluj.',W/2-40,H-16,12,'rgba(255,255,255,.6)','normal');
   if(msgT>0)txt(msg,W/2,40,20,'#ffd27a');
-  if(!cols.length&&!build&&crystals<COLLECTOR_COST)txt('Koniec gry – odśwież stronę (F5)',W/2,80,26,'#ff7a7a');
+
 }
+const $=id=>document.getElementById(id),menu=$('menu');
+function showMenu(res){
+  $('res').textContent=res||'';
+  $('b1').textContent=save.b1==null?'Najlepszy wynik: brak':'Najlepszy wynik: '+save.b1;
+  $('b2').textContent=save.b2==null?'Najlepszy wynik: brak':'Najlepszy wynik: '+save.b2;
+  $('col2').style.display=save.u2?'':'none';
+  menu.style.display='flex';
+}
+function initAc(){if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)()}
+$('l1').onclick=()=>{initAc();startLevel(1)};
+$('l2').onclick=()=>{initAc();startLevel(2)};
+showMenu();
 let last=performance.now();
-(function loop(n){const dt=Math.min(.05,(n-last)/1000);last=n;update(dt);draw();requestAnimationFrame(loop)})(last);
+(function loop(n){const dt=Math.min(.05,(n-last)/1000);last=n;if(state=='play')update(dt);draw();requestAnimationFrame(loop)})(last);
 </script></body></html>
